@@ -62,7 +62,7 @@ public class UsersController : ControllerBase
     }
 
     // GET /api/users/{id}
-    // Obtiene un usuario por ID. Retorna 200 OK o 404 si no existe. 
+    // Obtiene un usuario por ID. Retorna 200 OK o 404 si no existe.
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

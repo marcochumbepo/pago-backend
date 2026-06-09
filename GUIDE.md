@@ -512,6 +512,48 @@ curl https://<URL>/health
 
 ---
 
+## 11. Seguridad avanzada en Azure (opcional)
+
+Si el proyecto escala a un entorno enterprise, estos tres servicios refuerzan
+la seguridad significativamente. No son necesarios para desarrollo ni MVPs.
+
+### 11.1 API Management (APIM)
+
+| Concepto | Descripción |
+|---|---|
+| **¿Qué hace?** | Actúa como un gateway único delante de todas tus APIs. Los clientes no acceden directo al Container App, sino a través de APIM. |
+| **¿Qué soluciona?** | Rate limiting (evita abuso de endpoints), IP filtering (solo ciertas IPs pueden acceder), throttling, caching de respuestas, transformación de requests/responses, API keys adicionales, analytics de consumo. |
+| **¿Cuándo usarlo?** | Cuando exponés la API a terceros, necesitás planes de suscripción por cliente, o querés monitorear quién consume qué. |
+| **Costo estimado** | Developer tier: **~$50/mes** |
+
+### 11.2 Virtual Network + Private Endpoint
+
+| Concepto | Descripción |
+|---|---|
+| **¿Qué hace?** | Coloca tus recursos Azure (ACR, Container Apps) dentro de una red virtual privada. Los Private Endpoints les asignan IPs privadas, inaccesibles desde internet. |
+| **¿Qué soluciona?** | Elimina la exposición pública del Container Registry y el Container App Environment. Solo servicios dentro de la VNet o conectados por VPN pueden acceder. Ideal para compliance (SOC2, HIPAA, PCI). |
+| **¿Cuándo usarlo?** | Cuando manejás datos sensibles que por regulación no pueden transitar por internet público, o cuando tu arquitectura requiere que todos los servicios se comuniquen internamente. |
+| **Costo estimado** | VNet: **gratis**. Private Endpoint: **~$7/mes** por endpoint. Para ACR + Container Apps = **~$14/mes** |
+
+### 11.3 Application Gateway + WAF (Web Application Firewall)
+
+| Concepto | Descripción |
+|---|---|
+| **¿Qué hace?** | Un load balancer de capa 7 con firewall integrado que inspecciona todo el tráfico HTTP/HTTPS entrante. |
+| **¿Qué soluciona?** | Protege contra OWASP Top 10: SQL injection, XSS, CSRF, path traversal, header injection, bots maliciosos. Bloquea ataques antes de que lleguen a tu aplicación. |
+| **¿Cuándo usarlo?** | Cuando la API está expuesta a internet público y procesa datos sensibles. Es la última capa de defensa antes de tu código. |
+| **Costo estimado** | WAF v2: **~$0.40/hora ≈ $290/mes** |
+
+### Orden recomendado de adopción
+
+```
+1. API Management     → Primero, si tenés múltiples clientes o APIs
+2. VNet + Private     → Después, si hay requisitos de compliance
+3. Application Gateway → Al final, si exponés datos sensibles al público
+```
+
+---
+
 ## Resumen de URLs importantes
 
 | Qué | URL |

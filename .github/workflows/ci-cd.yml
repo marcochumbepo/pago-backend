@@ -1,24 +1,25 @@
 # .github/workflows/ci-cd.yml
 # Pipeline CI/CD con GitHub Actions.
 #
-# Triggers:
-# - push a main:        CI (restore, build, test) + Docker build & push + deploy
-# - pull_request a main: CI (validacion antes de merge)
-# - workflow_dispatch:   Ejecucion manual
-#
-# Requiere un unico secret AZURE_CREDENTIALS con el JSON completo
-# del Service Principal (output de az ad sp create-for-rbac --sdk-auth).
+# Estrategia de ramas:
+#   feature/*, fix/*, hotfix/* → sin CI (solo PR)
+#   develop (push)             → build + test
+#   main    (push)             → build + test + docker build/push + deploy
+#   PR → develop / main        → build + test
 
 name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
+  # ============================================================
+  # Job 1: Build & Test (comun a develop y main)
+  # ============================================================
   ci:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -41,19 +42,20 @@ jobs:
       - name: Test
         run: dotnet test UsersApi.sln --configuration Release --no-build --verbosity normal
 
+  # ============================================================
+  # Job 2: Docker Build, Push & Deploy (SOLO push a main)
+  # ============================================================
   docker:
     name: Docker Build, Push & Deploy
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Solo se ejecuta en push a main (no en PR, no en develop)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Autenticacion con credenciales de Service Principal (client secret).
-      # AZURE_CREDENTIALS es el JSON completo del output de:
-      #   az ad sp create-for-rbac --sdk-auth
       - name: Login a Azure
         uses: azure/login@v2
         with:
@@ -67,7 +69,6 @@ jobs:
           docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }} .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }}
 
-      # Actualiza el Container App con la nueva imagen y variables de entorno.
       - name: Deploy a Azure Container Apps
         run: |
           az containerapp update \

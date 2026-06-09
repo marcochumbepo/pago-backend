@@ -99,10 +99,12 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Asegurar que la base de datos y tablas existan al iniciar.
-// EnsureCreated() crea la BD si no existe (útil para desarrollo/demo).
-// En producción se debe usar Migrate() con migraciones versionadas.
-using (var scope = app.Services.CreateScope())
+// Solo aplica cuando se usa SQL Server. Con InMemory la BD se crea automáticamente.
+// En producción usar Migrate() con migraciones versionadas en lugar de EnsureCreated().
+var dbProvider = builder.Configuration["Database:Provider"] ?? "InMemory";
+if (dbProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<UsersApi.Infrastructure.Data.AppDbContext>();
     dbContext.Database.EnsureCreated();
 }

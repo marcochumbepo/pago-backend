@@ -1,16 +1,13 @@
 # .github/workflows/ci-cd.yml
 # Pipeline CI/CD con GitHub Actions.
-# 
+#
 # Triggers:
-# - push a main:        CI (restore, build, test) + Docker build & push
-# - pull_request a main: CI (validación antes de merge)
-# - workflow_dispatch:   Ejecución manual
-# 
-# Variables de entorno en Azure Container Apps:
-# Las mismas variables definidas en .env se configuran en el Container App
-# como secrets o env vars desde el portal de Azure:
-#   ConnectionStrings__DefaultConnection = Server=<host>,1433;...
-#   ASPNETCORE_ENVIRONMENT              = Production
+# - push a main:        CI (restore, build, test) + Docker build & push + deploy
+# - pull_request a main: CI (validacion antes de merge)
+# - workflow_dispatch:   Ejecucion manual
+#
+# Requiere un unico secret AZURE_CREDENTIALS con el JSON completo
+# del Service Principal (output de az ad sp create-for-rbac --sdk-auth).
 
 name: CI/CD Pipeline
 
@@ -27,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código fuente
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configurar .NET 8
@@ -35,31 +32,32 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Restore dependencias
+      - name: Restore
         run: dotnet restore UsersApi.sln
 
-      - name: Compilar solución
+      - name: Build
         run: dotnet build UsersApi.sln --configuration Release --no-restore
 
-      - name: Ejecutar pruebas unitarias
+      - name: Test
         run: dotnet test UsersApi.sln --configuration Release --no-build --verbosity normal
 
   docker:
-    name: Docker Build & Push
+    name: Docker Build, Push & Deploy
     runs-on: ubuntu-latest
     needs: ci
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
-      - name: Checkout código fuente
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # Autenticacion con credenciales de Service Principal (client secret).
+      # AZURE_CREDENTIALS es el JSON completo del output de:
+      #   az ad sp create-for-rbac --sdk-auth
       - name: Login a Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Login a Azure Container Registry
         run: az acr login --name ${{ secrets.ACR_NAME }}
@@ -69,8 +67,7 @@ jobs:
           docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }} .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }}
 
-      # Despliegue a Azure Container Apps.
-      # Las variables de entorno se pasan aquí (mismas claves que en .env).
+      # Actualiza el Container App con la nueva imagen y variables de entorno.
       - name: Deploy a Azure Container Apps
         run: |
           az containerapp update \
@@ -78,5 +75,9 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
             --image ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }} \
             --set-env-vars \
-              "ConnectionStrings__DefaultConnection=${{ secrets.AZURE_SQL_CONNECTION }}" \
-              "ASPNETCORE_ENVIRONMENT=Production"
+              "Database__Provider=InMemory" \
+              "ASPNETCORE_ENVIRONMENT=Production" \
+              "Jwt__SecretKey=${{ secrets.JWT_SECRET_KEY }}" \
+              "Jwt__Issuer=UsersApi" \
+              "Jwt__Audience=UsersApi" \
+              "Jwt__ExpirationMinutes=60"

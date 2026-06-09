@@ -37,7 +37,7 @@ public class UsersController : ControllerBase
     }
 
     // POST /api/users
-    // Crea un nuevo usuario. Retorna 201 Created con la ubicación del recurso.
+    // Crea un nuevo usuario. Retorna 201 Created con la ubicación del recurso. 
     [HttpPost]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -47,7 +47,7 @@ public class UsersController : ControllerBase
     {
         var user = await _createUserService.ExecuteAsync(request, cancellationToken);
 
-        // Retorna 201 + Location header (RESTful) + el recurso creado en el body.
+        // Retorna 201 + Location header (RESTful) + el recurso creado en el body. 
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user);
     }
 

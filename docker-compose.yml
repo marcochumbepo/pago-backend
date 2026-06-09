@@ -1,0 +1,51 @@
+# docker-compose.yml
+# Orquesta los contenedores de la aplicación y la base de datos.
+# 
+# Servicios:
+# - api:       Aplicación .NET 8 (construida desde el Dockerfile local)
+# - sqlserver: SQL Server 2022 (imagen oficial de Microsoft)
+# 
+# Toda la configuración de ambiente se lee desde el archivo .env.
+# La API espera a que SQL Server esté healthy antes de iniciar.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: users-api
+    ports:
+      - "8080:8080"
+    # Carga las variables de entorno desde .env (única fuente de verdad).
+    # En Azure Container Apps, estas mismas variables se configuran como secrets/env vars.
+    env_file:
+      - .env
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      # La contraseña debe coincidir con la del connection string en .env.
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      # CMD-SHELL ejecuta el comando en un shell, permitiendo expandir $$MSSQL_SA_PASSWORD.
+      # Ruta sqlcmd: /opt/mssql-tools18/bin/sqlcmd (cambió en SQL Server 2022).
+      # Flag -C: necesario para TrustServerCertificate en versiones recientes de sqlcmd.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  sqlserver-data:
+    name: sqlserver-data

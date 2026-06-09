@@ -1,0 +1,22 @@
+# .dockerignore - Archivos excluidos del contexto de build de Docker.
+# Reduce el tamaño del contexto enviado al daemon de Docker,
+# acelera el build y evita incluir archivos sensibles en la imagen.
+
+**/bin/
+**/obj/
+**/node_modules/
+**/.git/
+**/.vs/
+**/.vscode/
+*.user
+*.suo
+*.md
+.gitignore
+.dockerignore
+.env
+.env.example
+docker-compose.yml
+.vs/
+packages/
+*.nupkg
+**/.DS_Store

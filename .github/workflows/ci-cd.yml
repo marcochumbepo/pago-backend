@@ -1,0 +1,82 @@
+# .github/workflows/ci-cd.yml
+# Pipeline CI/CD con GitHub Actions.
+# 
+# Triggers:
+# - push a main:        CI (restore, build, test) + Docker build & push
+# - pull_request a main: CI (validación antes de merge)
+# - workflow_dispatch:   Ejecución manual
+# 
+# Variables de entorno en Azure Container Apps:
+# Las mismas variables definidas en .env se configuran en el Container App
+# como secrets o env vars desde el portal de Azure:
+#   ConnectionStrings__DefaultConnection = Server=<host>,1433;...
+#   ASPNETCORE_ENVIRONMENT              = Production
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencias
+        run: dotnet restore UsersApi.sln
+
+      - name: Compilar solución
+        run: dotnet build UsersApi.sln --configuration Release --no-restore
+
+      - name: Ejecutar pruebas unitarias
+        run: dotnet test UsersApi.sln --configuration Release --no-build --verbosity normal
+
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout código fuente
+        uses: actions/checkout@v4
+
+      - name: Login a Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login a Azure Container Registry
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build y Push imagen Docker
+        run: |
+          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }} .
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }}
+
+      # Despliegue a Azure Container Apps.
+      # Las variables de entorno se pasan aquí (mismas claves que en .env).
+      - name: Deploy a Azure Container Apps
+        run: |
+          az containerapp update \
+            --name users-api \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/users-api:${{ github.sha }} \
+            --set-env-vars \
+              "ConnectionStrings__DefaultConnection=${{ secrets.AZURE_SQL_CONNECTION }}" \
+              "ASPNETCORE_ENVIRONMENT=Production"
